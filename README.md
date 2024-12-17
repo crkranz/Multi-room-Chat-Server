@@ -45,6 +45,7 @@
 ### Usability:
 - The chat application is designed with a focus on ease of use, ensuring that users can easily join rooms and communicate with others.
 - The site is visually appealing, with a simple yet intuitive design that enhances user experience.
+![Chat Room Application Screenshot](ChatRoom.png)
 
 ### Technologies Used:
 - Frontend: HTML, CSS, JavaScript
