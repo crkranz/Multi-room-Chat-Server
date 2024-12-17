@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Client</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: row;
+            height: 100vh;
+            background-color: #121212;
+            color: #E0E0E0;
+        }
+
+        .main-lobby {
+            width: 50%;
+            padding: 20px;
+            background-color: #1E1E1E;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+        }
+
+        h2 {
+            color: #E0E0E0;
+            margin-bottom: 10px;
+        }
+
+        .chat-room {
+            width: 50%;
+            padding: 20px;
+            background-color: #2A2A2A;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+        }
+
+        #chatlog {
+            flex: 1;
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+            color: #333;
+        }
+
+        input[type="text"],
+        input[type="password"] {
+            width: calc(100% - 20px);
+            padding: 12px;
+            margin-bottom: 10px;
+            border: none;
+            border-radius: 4px;
+            background-color: #3A3A3A;
+            color: #E0E0E0;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        .room {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+            padding: 8px;
+            border-radius: 4px;
+            background-color: #3A3A3A;
+        }
+
+        .room:hover {
+            background-color: #4A4A4A;
+        }
+
+        .user-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+            padding: 8px;
+            border-radius: 4px;
+            background-color: #3A3A3A;
+        }
+
+        .user-item:hover {
+            background-color: #4A4A4A;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="main-lobby">
+        <h2>Main Lobby</h2>
+        <input id="nickname_input" type="text" placeholder="Enter nickname">
+        <select id="icon_selector">
+            <option value="🐮">🐮</option>
+            <option value="🦊">🦊</option>
+            <option value="🐼">🐼</option>
+            <option value="🐸">🐸</option>
+            <option value="🦁">🦁</option>
+        </select>
+        <button onclick="setNickname()">Set Nickname</button>
+
+        <h2>Create Room</h2>
+        <input id="new_room_name" type="text" placeholder="Room name">
+        <input id="room_password" type="password" placeholder="Password (optional)">
+        <button onclick="createRoom()">Create Room</button>
+
+        <h2>Available Rooms</h2>
+        <div id="room_list"></div>
+    </div>
+
+    <div class="chat-room">
+        <h2 id="current_room">Chat Room: <span id="room_name">Lobby</span></h2>
+        <h2>Users in Chat Room:</h2>
+        <div id="user_list"></div>
+        <div id="chatlog"></div>
+
+        <div class="emoji-buttons">
+            <button onclick="sendMessage('😊')">😊</button>
+            <button onclick="sendMessage('😂')">😂</button>
+            <button onclick="sendMessage('👍')">👍</button>
+            <button onclick="sendMessage('❤️')">❤️</button>
+        </div>
+        <input id="message_input" type="text" placeholder="Type a message">
+        <button onclick="sendMessage()">Send</button>
+    </div>
+
+    <script>
+        const socket = io.connect();
+        let inLobby = true;
+
+        // Request room list on page load
+        window.onload = function () {
+            socket.emit("request_room_list");
+        };
+
+
+        // Set user's nickname 
+        function setNickname() {
+            const nickname = document.getElementById("nickname_input").value.trim();
+            const icon = document.getElementById("icon_selector").value;
+
+            if (nickname === "") {
+                alert("Nickname cannot be empty.");
+                return;
+            }
+            //creative portion - add selected emoji icon to nickname.
+            nicknameWithIcon = `${icon} ${nickname}`;
+            socket.emit("set_nickname", nicknameWithIcon);
+            alert("Nickname set as: " + nicknameWithIcon);
+        }
+
+        // Create a new room
+        function createRoom() {
+            const roomName = document.getElementById("new_room_name").value;
+            const password = document.getElementById("room_password").value;
+            socket.emit("create_room", { roomName, password });
+        }
+
+
+
+        // Update the display of what room you're in to reflect joining or being kicked to another room
+        socket.on("current_room", function (data) {
+            document.getElementById("room_name").textContent = data.roomName;
+            inLobby = data.roomName === "Lobby"; // Check if the current room is the lobby
+            updateUserListVisibility(); // Update visibility based on the current room
+        });
+
+        function updateUserListVisibility() {
+            const userListDiv = document.getElementById("user_list");
+            const userItems = userListDiv.getElementsByClassName("user-item");
+            for (let item of userItems) {
+                item.style.display = inLobby ? "none" : "flex"; // Hide in lobby, show otherwise
+            }
+        }
+
+        // Ban a user 
+        function banUser(userId) {
+            socket.emit("ban_user", userId);
+        }
+
+        // Listen for banned_from_room event
+        socket.on("banned_from_room", function (message) {
+            alert(message); // Alert the user that they have been banned
+            // Move the user back to the Lobby UI if they are banned
+            document.getElementById("room_name").textContent = "Lobby";
+        });
+
+        socket.on("room_created", function (roomName) {
+            alert("Room " + roomName + " created!");
+
+        });
+
+        //log and store user ID 
+        socket.on("user_info", function (me) {
+            console.log(me);
+            mySocketId = me.id;
+        });
+
+        socket.on("room_error", function (errorMessage) {
+            alert(errorMessage);
+        });
+
+        // Join room function
+        function joinRoom(roomName) {
+            const nickname = document.getElementById("nickname_input").value; // Get the nickname
+            if (!nickname) {
+                alert("Please set your nickname before joining a room.");
+                return;
+            }
+
+            const password = prompt("Enter password for " + roomName + " (if required):");
+            socket.emit("join_room", { roomName, password });
+            console.log("roomname: " + roomName);
+            document.getElementById("room_name").textContent = roomName;
+        }
+
+        //Function to send a message
+        function sendMessage(emoji = null) {
+            // If an emoji is provided, send that as the message
+            let message;
+            if (emoji) {
+                message = emoji;
+            } else {
+                // Otherwise, send the text in the input field
+                message = document.getElementById("message_input").value.trim();
+                if (message === "") { // Prevent sending empty messages
+                    alert("Message cannot be empty.");
+                    return;
+                }
+                document.getElementById("message_input").value = ""; // Clear input after sending
+            }
+
+            // Emit message to the room
+            socket.emit("message_to_room", message);
+        }
+
+        //present message to client in the chatbox
+        socket.on("message_to_client", function ({ message, name }) {
+            const chatlog = document.getElementById("chatlog");
+            chatlog.innerHTML += `<div><strong>${name}:</strong> ${message}</div>`;
+            chatlog.scrollTop = chatlog.scrollHeight; // Scroll to the bottom
+        });
+
+
+        // Display available rooms in the lobby
+        socket.on("room_list", function (rooms) {
+            const roomListDiv = document.getElementById("room_list");
+            roomListDiv.innerHTML = ""; // Clear existing rooms
+            rooms.forEach(room => {
+                const roomDiv = document.createElement("div");
+                roomDiv.classList.add("room");
+                roomDiv.innerHTML = `<span>${room}</span> <button onclick="joinRoom('${room}')">Join</button>`;
+                roomListDiv.appendChild(roomDiv);
+            });
+        });
+
+        //Display users in the room, with buttons to ban and kick out
+        socket.on("user_list", function (users) {
+            console.log("users:", users);
+            const userListDiv = document.getElementById("user_list");
+            userListDiv.innerHTML = ""; // Clear existing users
+            users.forEach(user => {
+                const userItem = document.createElement("div");
+                userItem.classList.add("user-item");
+
+                // Display nickname of each user
+                userItem.innerHTML = `<span>${user.nickname}</span>`;
+
+                // Create DM button
+                const dmButton = document.createElement("button");
+                dmButton.textContent = "private message";
+                dmButton.onclick = () => openDirectMessage(user.id); // Pass user ID to the DM function
+
+                const kickButton = document.createElement("button");
+                kickButton.textContent = "Kick";
+                kickButton.onclick = () => kickUser(user.id); // Call kickUser function
+                userItem.appendChild(kickButton);
+
+                const banButton = document.createElement("button");
+                banButton.textContent = "Ban";
+                banButton.onclick = () => banUser(user.id); // Call banUser function
+                userItem.appendChild(banButton);
+
+                // Append DM button to user item
+                userItem.appendChild(dmButton);
+                userListDiv.appendChild(userItem);
+            });
+
+            updateUserListVisibility(); // Call to update visibility after user list is populated
+        });
+
+
+        //kick out user
+        function kickUser(userId) {
+            console.log(userId);
+            socket.emit("kick_user", userId);
+        }
+
+        //alert that user has been kicked
+        socket.on("kicked_from_room", function (message) {
+            alert(message);
+        });
+
+        //send DM
+        function openDirectMessage(recipientId) {
+            const messageInput = prompt("Enter your message:");
+            if (messageInput) {
+                // Send the direct message
+                socket.emit("direct_message", { recipientId, message: messageInput });
+            }
+        }
+
+        //receive DM
+        socket.on("direct_message", function (data) {
+            const chatLog = document.getElementById("chatlog");
+            chatLog.innerHTML += `<p><strong>DM from ${data.name}:</strong> ${data.message}</p>`;
+            chatLog.scrollTop = chatLog.scrollHeight; // Scroll to bottom
+        });
+
+    </script>
+</body>
+
+</html>
